@@ -35,7 +35,7 @@ class MyPoc(BaseFrame):
         # 漏洞相关信息
         'vul': {
             'app_name': 'ElasticSearch',  # 漏洞所涉及的应用名称
-            'vul_version': ['less than 1.2'],  # 受漏洞影响的应用版本
+            'vul_version': ['<= 1.2'],  # 受漏洞影响的应用版本
             'type': 'Code Execution',  # 漏洞类型
             'tag': ['ElasticSearch', 'remote code execution', 'java'],  # 漏洞相关tag
             'desc': 'ElasticSearch 远程代码执行漏洞.',  # 漏洞描述
@@ -59,7 +59,7 @@ class MyPoc(BaseFrame):
                 }
             },
             'script_fields': {
-                'task': {
+                'task': {  # you can call the task any name, such as 'biubiubiu' etc.
                     'script': exp
                 }
             }
